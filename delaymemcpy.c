@@ -106,7 +106,7 @@ static int mprotect_full_page(void *ptr, size_t size, int prot) {
    then performs the actual copy.
  */
 static void actual_copy(void *dst, void *src, size_t size) {
-  printf("Actual copy\n");
+  printf("\nActual copy. Size 0x%x\n", size);
   mprotect_full_page(src, size, PROT_READ | PROT_WRITE);
   mprotect_full_page(dst, size, PROT_READ | PROT_WRITE);
 
@@ -219,8 +219,14 @@ static void delay_memcpy_segv_handler(int signum, siginfo_t *info, void *context
     raise(SIGKILL);
   }
 
-  actual_copy(copy->dst, copy->src, copy->size );
-  remove_pending_copy(copy);
+
+  while(copy)
+    {
+      actual_copy(copy->dst, copy->src, copy->size );
+      remove_pending_copy(copy);
+      copy = get_pending_copy(info->si_addr);
+    }
+
 
 }
 
@@ -250,10 +256,23 @@ void initialize_delay_memcpy_data(void) {
  */
 void *delay_memcpy(void *dst, void *src, size_t size) {
 
-  mprotect_full_page( src, size, PROT_READ );
-  mprotect_full_page( dst, size, PROT_NONE );
+  void* page_start_ptr = page_start(src);
+  void* last_page_start_ptr = page_start(src+size);
 
-  add_pending_copy(dst, src, size, NULL );
+  void* page_dest_ptr = page_start(dst);
+
+  while( page_start_ptr + page_size <= last_page_start_ptr )
+	{
+	  mprotect_full_page( page_start_ptr, page_size, PROT_READ );
+	  mprotect_full_page( page_dest_ptr, page_size, PROT_NONE );
+
+ 	  add_pending_copy(page_dest_ptr, page_start_ptr, page_size, NULL );
+
+	  page_start_ptr += page_size;	
+	  page_dest_ptr += page_size;	
+	}
+
+
 
   return dst;
 }

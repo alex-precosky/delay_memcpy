@@ -6,7 +6,7 @@
 
 #include "delaymemcpy.h"
 
-#define ARRAY_SIZE 0x1000000 // 2^30=1GB
+#define ARRAY_SIZE 0x4000000 // 2^30=1GB
 
 #define NUM_EVENTS 1000
 

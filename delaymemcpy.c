@@ -61,8 +61,10 @@ static void *page_start(void *ptr) {
 static int address_in_range(void *start, size_t size, void *ptr) {
   
   /* TO BE COMPLETED BY THE STUDENT */
-  if( ptr >= start && ptr <= start+size-1 )
-    return 1;
+  if( ptr >= start && ptr < start+size )
+    {
+      return 1;
+    }
   else
     return 0;
 }
@@ -77,9 +79,10 @@ static int address_in_range(void *start, size_t size, void *ptr) {
 static int address_in_page_range(void *start, size_t size, void *ptr) {
   
   /* TO BE COMPLETED BY THE STUDENT */
-  void* page_start_of_ptr = page_start(ptr);
+  void* page_start_of_range = page_start(start);
+  void* end_of_page_range = page_start(start+size-1) + page_size - 1;
   
-  if( address_in_range( page_start_of_ptr, size, ptr ) )
+  if( ptr >= page_start_of_range && ptr <= end_of_page_range )
     return 1;
   else
     return 0;
@@ -106,7 +109,7 @@ static int mprotect_full_page(void *ptr, size_t size, int prot) {
    then performs the actual copy.
  */
 static void actual_copy(void *dst, void *src, size_t size) {
-  printf("\nActual copy. Size 0x%x\n", size);
+  printf("\nActual copy. Src: 0x%x  Dst:  0x%x   Size 0x%x\n", src, dst, size);
   mprotect_full_page(src, size, PROT_READ | PROT_WRITE);
   mprotect_full_page(dst, size, PROT_READ | PROT_WRITE);
 
@@ -191,14 +194,117 @@ static void remove_pending_copy(pending_copy_t *copy) {
 static pending_copy_t *get_pending_copy(void *ptr) {
   
   pending_copy_t *copy;
-
   for (copy = first_pending_copy; copy; copy = copy->next) {
-    
+
     if (address_in_page_range(copy->src, copy->size, ptr) ||
 	address_in_page_range(copy->dst, copy->size, ptr))
       return copy;
   }
+
   return NULL;
+}
+
+
+static void process_pending_copy( siginfo_t *info, pending_copy_t *copy )
+{
+  printf("processing_pending_copy copysrc: %x  copydst: %x  size: %x si_addr: %x\n", copy->src, copy->dst, copy->size, info->si_addr);
+
+  // calculate offset = the offset into the pending copy of the affected address 
+  size_t offset = NULL;
+  if( address_in_range(copy->src, copy->size, info->si_addr) )
+      offset = info->si_addr - copy->src;
+  else
+    offset = info->si_addr - copy->dst;
+
+
+  // see if the affected address, info->si_addr, is in the first page of the pending copy
+  int is_first_page = 0;
+  if( page_start(copy->src + offset) == page_start(copy->src) )
+    is_first_page = 1;
+
+
+  // do the same, but for the last page of the pending copy
+  int is_last_page = 0;
+  if( page_start(copy->src + offset) == page_start(copy->src + copy->size - 1) )
+    is_last_page = 1;
+
+  printf("copy->src: %x\n", copy->src);
+  printf("offset: %x\n", offset);
+
+  if(is_first_page == 1)
+    printf("is first page!");
+
+  if(is_last_page == 1)
+    printf("is last page!");
+
+  // find src and dst of the actual_copy
+  void* actual_copy_src;
+  void* actual_copy_dst;
+  if( is_first_page )
+    {
+      actual_copy_src = copy->src;
+      actual_copy_dst = copy->dst;
+    }
+  else
+    {
+      actual_copy_src = page_start( copy->src + offset );
+      actual_copy_dst = page_start( copy->dst + offset );
+    }
+
+  // figure out the size of the actual_copy
+  size_t actual_copy_size = 0;
+  if( is_first_page &! is_last_page )
+    {
+      actual_copy_size = page_size - (copy->src - page_start(copy->src));
+    }
+  else if( !is_first_page & is_last_page )
+    {
+      actual_copy_size = copy->src + copy->size - page_start(copy->src + copy->size-1);
+    }
+  else if( !is_first_page & !is_last_page )
+    {
+      actual_copy_size = page_size;
+    }
+  else
+    {
+      actual_copy_size = copy->size;
+    }
+
+  // now that we know the src, dst, and size of the actual_copy, go ahead and do it
+  actual_copy( actual_copy_dst, actual_copy_src, actual_copy_size );
+
+
+  // now to handle splitting and/or deleting of the pending copy
+  if( is_first_page  && !is_last_page )
+    {
+      copy->size -= page_size - (copy->src - page_start(copy->src));
+      copy->src = page_start(copy->src + page_size );
+      copy->dst = page_start(copy->dst + page_size );
+      printf("new copysrc: %x  new copydst: %x  new size: %x\n", copy->src, copy->dst, copy->size);
+    }
+  else if( !is_first_page && is_last_page )
+    {
+      copy->size -= (copy->src+copy->size - page_start(copy->src + copy->size - 1));
+      printf("new copysize: %x\n", copy->size);
+    }
+  else if( !is_first_page && !is_last_page )
+    {
+
+      void* new_pending_copy_src = page_start(copy->src + offset) + page_size;
+      void* new_pending_copy_dst = page_start(copy->dst + offset) + page_size;
+      size_t new_pending_copy_size = (copy->src + copy->size) - (page_start(copy->src + offset) + page_size);
+      printf("Generating new pending copy src: %x  dst: %x  size: %x\n", new_pending_copy_src, new_pending_copy_dst, new_pending_copy_size);
+      add_pending_copy(new_pending_copy_dst, new_pending_copy_src, new_pending_copy_size, copy);
+
+      copy->size -= page_size - (copy->src - page_start(copy->src) - page_size);
+      printf("Shrinking existing copy to: %x\n", copy->size);
+    }
+  else
+    {
+      printf("Removing pending copy!\n");
+      remove_pending_copy(copy);
+    }
+
 }
 
 /* Segmentation fault handler. If the address that caused the
@@ -219,15 +325,22 @@ static void delay_memcpy_segv_handler(int signum, siginfo_t *info, void *context
     raise(SIGKILL);
   }
 
-
+  
   while(copy)
     {
-      actual_copy(copy->dst, copy->src, copy->size );
-      remove_pending_copy(copy);
+      process_pending_copy(info, copy);
+      printf("Pending copy processed!\n");
       copy = get_pending_copy(info->si_addr);
     }
 
 
+}
+
+void reset_pending_copy_slots()
+{
+  first_pending_copy = NULL;
+  for(int i = 0; i < MAX_PENDING_COPIES; i++)
+    pending_copy_slots[i].in_use = 0;
 }
 
 /* Initializes the data structures and global variables used in the
@@ -256,23 +369,29 @@ void initialize_delay_memcpy_data(void) {
  */
 void *delay_memcpy(void *dst, void *src, size_t size) {
 
-  void* page_start_ptr = page_start(src);
-  void* last_page_start_ptr = page_start(src+size);
+  
+  void* first_source_page = page_start(src);
+  void* last_soruce_page = page_start(src+size-1);
 
-  void* page_dest_ptr = page_start(dst);
+  void* first_dest_page = page_start(dst);
+  void* last_dest_page = page_start(dst+size-1);
 
-  while( page_start_ptr + page_size <= last_page_start_ptr )
-	{
-	  mprotect_full_page( page_start_ptr, page_size, PROT_READ );
-	  mprotect_full_page( page_dest_ptr, page_size, PROT_NONE );
-
- 	  add_pending_copy(page_dest_ptr, page_start_ptr, page_size, NULL );
-
-	  page_start_ptr += page_size;	
-	  page_dest_ptr += page_size;	
-	}
+  void* it = first_source_page;
+  while(it <= last_soruce_page )
+    {
+      mprotect_full_page( it, page_size, PROT_READ );
+      it += page_size;
+    }
 
 
+  it = first_dest_page;
+  while(it <= last_dest_page )
+    {
+      mprotect_full_page( it, page_size, PROT_NONE );
+      it += page_size;
+    }
+
+  add_pending_copy( dst, src, size, NULL );
 
   return dst;
 }

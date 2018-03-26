@@ -5,5 +5,6 @@
 
 void initialize_delay_memcpy_data(void);
 void *delay_memcpy(void *dst, void *src, size_t size);
+void reset_pending_copy_slots();
 
 #endif

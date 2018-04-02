@@ -109,12 +109,15 @@ static int mprotect_full_page(void *ptr, size_t size, int prot) {
    then performs the actual copy.
  */
 static void actual_copy(void *dst, void *src, size_t size) {
-  printf("\nActual copy. Src: 0x%x  Dst:  0x%x   Size 0x%x\n", src, dst, size);
-  mprotect_full_page(src, size, PROT_READ | PROT_WRITE);
-  mprotect_full_page(dst, size, PROT_READ | PROT_WRITE);
+//  printf("\nActual copy. Src: 0x%x  Dst:  0x%x   Size 0x%x\n", src, dst, size);
 
+  mprotect_full_page(src, size, PROT_READ | PROT_WRITE);
+  mprotect_full_page(dst, size, PROT_READ | PROT_WRITE); 
   memcpy(dst, src, size);
+
+
 }
+
 
 /* Adds a pending copy object to the list of pending copies. If
    base_copy is NULL, adds the object to the end of the list,
@@ -207,7 +210,7 @@ static pending_copy_t *get_pending_copy(void *ptr) {
 
 static void process_pending_copy( siginfo_t *info, pending_copy_t *copy )
 {
-  printf("processing_pending_copy copysrc: %x  copydst: %x  size: %x si_addr: %x\n", copy->src, copy->dst, copy->size, info->si_addr);
+//  printf("processing_pending_copy copysrc: %x  copydst: %x  size: %x si_addr: %x\n", copy->src, copy->dst, copy->size, info->si_addr);
 
   // calculate offset = the offset into the pending copy of the affected address 
   size_t offset = NULL;
@@ -228,14 +231,14 @@ static void process_pending_copy( siginfo_t *info, pending_copy_t *copy )
   if( page_start(copy->src + offset) == page_start(copy->src + copy->size - 1) )
     is_last_page = 1;
 
-  printf("copy->src: %x\n", copy->src);
-  printf("offset: %x\n", offset);
+  //printf("copy->src: %x\n", copy->src);
+  //printf("offset: %x\n", offset);
 
-  if(is_first_page == 1)
-    printf("is first page!");
+//  if(is_first_page == 1)
+//    printf("is first page!");
 
-  if(is_last_page == 1)
-    printf("is last page!");
+//  if(is_last_page == 1)
+//    printf("is last page!");
 
   // find src and dst of the actual_copy
   void* actual_copy_src;
@@ -280,12 +283,12 @@ static void process_pending_copy( siginfo_t *info, pending_copy_t *copy )
       copy->size -= page_size - (copy->src - page_start(copy->src));
       copy->src = page_start(copy->src + page_size );
       copy->dst = page_start(copy->dst + page_size );
-      printf("new copysrc: %x  new copydst: %x  new size: %x\n", copy->src, copy->dst, copy->size);
+//      printf("new copysrc: %x  new copydst: %x  new size: %x\n", copy->src, copy->dst, copy->size);
     }
   else if( !is_first_page && is_last_page )
     {
       copy->size -= (copy->src+copy->size - page_start(copy->src + copy->size - 1));
-      printf("new copysize: %x\n", copy->size);
+//      printf("new copysize: %x\n", copy->size);
     }
   else if( !is_first_page && !is_last_page )
     {
@@ -293,15 +296,15 @@ static void process_pending_copy( siginfo_t *info, pending_copy_t *copy )
       void* new_pending_copy_src = page_start(copy->src + offset) + page_size;
       void* new_pending_copy_dst = page_start(copy->dst + offset) + page_size;
       size_t new_pending_copy_size = (copy->src + copy->size) - (page_start(copy->src + offset) + page_size);
-      printf("Generating new pending copy src: %x  dst: %x  size: %x\n", new_pending_copy_src, new_pending_copy_dst, new_pending_copy_size);
+//      printf("Generating new pending copy src: %x  dst: %x  size: %x\n", new_pending_copy_src, new_pending_copy_dst, new_pending_copy_size);
       add_pending_copy(new_pending_copy_dst, new_pending_copy_src, new_pending_copy_size, copy);
 
       copy->size -= page_size - (copy->src - page_start(copy->src) - page_size);
-      printf("Shrinking existing copy to: %x\n", copy->size);
+//      printf("Shrinking existing copy to: %x\n", copy->size);
     }
   else
     {
-      printf("Removing pending copy!\n");
+      //printf("Removing pending copy!\n");
       remove_pending_copy(copy);
     }
 
@@ -329,7 +332,7 @@ static void delay_memcpy_segv_handler(int signum, siginfo_t *info, void *context
   while(copy)
     {
       process_pending_copy(info, copy);
-      printf("Pending copy processed!\n");
+//      printf("Pending copy processed!\n");
       copy = get_pending_copy(info->si_addr);
     }
 
@@ -340,7 +343,41 @@ void reset_pending_copy_slots()
 {
   first_pending_copy = NULL;
   for(int i = 0; i < MAX_PENDING_COPIES; i++)
-    pending_copy_slots[i].in_use = 0;
+    {
+      if( pending_copy_slots[i].in_use == 1 )
+	{
+	  
+	  void* src = pending_copy_slots[i].src;
+	  void* dst = pending_copy_slots[i].dst;
+	  size_t size = pending_copy_slots[i].size;
+
+	  void* first_source_page = page_start(src);
+	  void* last_soruce_page = page_start(src+size-1);
+
+	  void* first_dest_page = page_start(dst);
+	  void* last_dest_page = page_start(dst+size-1);
+
+	  void* it = first_source_page;
+	  while(it <= last_soruce_page )
+	    {
+	      mprotect_full_page( it, page_size, PROT_READ | PROT_WRITE );
+	      it += page_size;
+	    }
+
+
+	  it = first_dest_page;
+	  while(it <= last_dest_page )
+	    {
+	      mprotect_full_page( it, page_size, PROT_READ | PROT_WRITE );
+	      it += page_size;
+	    }
+
+
+	  pending_copy_slots[i].in_use = 0;
+	}
+    }
+
+
 }
 
 /* Initializes the data structures and global variables used in the
@@ -376,9 +413,14 @@ void *delay_memcpy(void *dst, void *src, size_t size) {
   void* first_dest_page = page_start(dst);
   void* last_dest_page = page_start(dst+size-1);
 
-  void* it = first_source_page;
+  char* it = first_source_page;
+  volatile char read_char;  // prevent the unused read_char from being optimized out
+
   while(it <= last_soruce_page )
     {
+      // read from each source page to trigger an actual_copy if it needs it
+      read_char = *it;
+
       mprotect_full_page( it, page_size, PROT_READ );
       it += page_size;
     }
@@ -388,6 +430,7 @@ void *delay_memcpy(void *dst, void *src, size_t size) {
   while(it <= last_dest_page )
     {
       mprotect_full_page( it, page_size, PROT_NONE );
+//      printf("Protecting %x\n", it);
       it += page_size;
     }
 

@@ -38,9 +38,9 @@ int main(void) {
 
   initialize_delay_memcpy_data();
 
-  printf("array: 0x%x\n", array);
-  printf("copy: 0x%x\n", copy);
-  printf("copy2: 0x%x\n", copy2);
+  printf("array: 0x%lx\n", (unsigned long)array);
+  printf("copy: 0x%lx\n", (unsigned long)copy);
+  printf("copy2: 0x%lx\n", (unsigned long)copy2);
 
   /* printf("\nTest Case 1\n"); */
   /* printf("\nCopying one page of data, trigger copy via read dst...\n"); */
@@ -83,7 +83,7 @@ int main(void) {
 
 
   /* printf("\nTest Case 4\n"); */
-  /* printf("\nCopying two pages of data...\n"); */
+  /* printf("\nCopying two pages of data... accessing one then the other\n"); */
   /* random_array(array, 0x2000); */
   /* printf("Before copy: "); */
   /* print_array(array, 20); */
@@ -97,6 +97,23 @@ int main(void) {
   /* print_array(array + 0x1800, 20); */
   /* printf("Destination: "); */
   /* print_array(copy + 0x1800, 20);  // Triggers copy of second page */
+
+
+  /* printf("\nTest Case 4a\n"); */
+  /* printf("\nCopying two pages of data...\n"); */
+  /* random_array(array, 0x2000); */
+  /* printf("Before copy: "); */
+  /* print_array(array, 20); */
+ 
+  /* delay_memcpy(copy, array, 0x2000); */
+  /* printf("After copy : "); */
+  /* print_array(array + 0x1800, 20); */
+  /* printf("Destination: "); */
+  /* print_array(copy + 0x1800, 20);  // Triggers copy of second page only */
+  /* printf("2nd page:\nAfter copy : "); */
+  /* print_array(array, 20); */
+  /* printf("Destination: "); */
+  /* print_array(copy, 20);  // Triggers copy of first page */
 
 
   /* printf("\nTest Case 4. Copy unaligned two pages, access first page\n"); */
@@ -141,17 +158,17 @@ int main(void) {
   /* print_array(copy+400, 20); */
 
 
-  printf("\nTest Case 7. Copy three pages, then access the middle destination page\n");
-  random_array(array, 0x3000);
-  printf("Before copy: ");
-  print_array(array+0x1000, 20);
+  /* printf("\nTest Case 7. Copy three pages, then access the middle destination page\n"); */
+  /* random_array(array, 0x3000); */
+  /* printf("Before copy: "); */
+  /* print_array(array+0x1000, 20); */
   
-  delay_memcpy(copy, array, 0x3000);
-  copy[0x1000]++; // Triggers copy
-  printf("After copy : ");
-  print_array(array+0x1000, 20);
-  printf("Destination: ");
-  print_array(copy+0x1000, 20);
+  /* delay_memcpy(copy, array, 0x3000); */
+  /* copy[0x1000]++; // Triggers copy */
+  /* printf("After copy : "); */
+  /* print_array(array+0x1000, 20); */
+  /* printf("Destination: "); */
+  /* print_array(copy+0x1000, 20); */
 
 
 
@@ -160,16 +177,16 @@ int main(void) {
   print_array(null_ptr, 1);
 */
 
-  /* printf("\nCopying A to B to C\n"); */
-  /* random_array(array, 0x1000); */
-  /* printf("Before copy: "); */
-  /* print_array(array, 20); */
-  /* delay_memcpy(copy, array, 0x1000); */
-  /* delay_memcpy(copy2, copy, 0x1000); */
-  /* printf("Destination C :"); */
-  /* print_array(copy2, 20);  // should trigger two copies */
-  /* printf("Destination B :"); */
-  /* print_array(copy, 20); */
+  printf("\nCopying A to B to C\n");
+  random_array(array, 0x1000);
+  printf("Before copy: ");
+  print_array(array, 20);
+  delay_memcpy(copy, array, 0x1000);
+  delay_memcpy(copy2, copy, 0x1000);
+  printf("Destination C :");
+  print_array(copy2, 20);  // should trigger two copies
+  printf("Destination B :");
+  print_array(copy, 20);
 
   /* printf("\nCopying A to B to C\n"); */
   /* random_array(array, 0x1000); */

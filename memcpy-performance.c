@@ -6,9 +6,9 @@
 
 #include "delaymemcpy.h"
 
-#define ARRAY_SIZE 0x4000000 // 2^30=1GB
+#define ARRAY_SIZE 0x40000 // 2^30=1GB
 
-#define NUM_EVENTS 1000
+#define NUM_EVENTS 10
 
 /* Arrays declared as global, as this allows program to use more
    memory. Aligned to page boundaries so other global variables don't
